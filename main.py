@@ -44,7 +44,9 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS logs (
                     user_id TEXT,
                     wallet_address TEXT,
                     amount REAL,
-                    activation_time TEXT
+                    activation_time TEXT,
+                    paid BOOLEAN DEFAULT 0,
+                    payment_time TEXT
                 )''')
 conn.commit()
 
@@ -186,6 +188,44 @@ async def check_wallet_balances():
                     continue
 
 
+# Эндпоинт для проверки статуса оплаты
+@app.get("/check-payment-status")
+async def check_payment_status(user_id: str):
+    global monitoring_started
+    now = datetime.now()
+    one_hour_ago = now - timedelta(hours=1)
+
+    # if not monitoring_started:
+    #     monitoring_started = True  # Обновляем статус мониторинга
+    #     # thread = threading.Thread(target=check_transactions, daemon=True)
+    #     # thread.start()
+    #     asyncio.create_task(check_transactions())
+
+    # Ищем запись с указанным user_id и статусом оплаты
+    cursor.execute('''
+        SELECT payment_time, paid, activation_time
+        FROM logs 
+        WHERE user_id = ?
+        ORDER BY activation_time DESC LIMIT 1
+    ''', (user_id,))
+    record = cursor.fetchone()
+    payment_record, paid, activation_time = record
+
+    if record:
+        print(record)
+        if payment_record:
+            payment_time = datetime.strptime(payment_record, "%Y-%m-%d %H:%M:%S.%f")
+            print("payment_time")
+            if payment_time > one_hour_ago and paid == True:
+                return {"status": "Payment confirmed", "payment_time": payment_time}
+            else:
+                return {"status": "Payment confirmed but older than one hour", "payment_time": payment_time}
+        else:
+            return {"status": "No payment found or payment not confirmed"}
+    else:
+        return {"status": "No payment"}
+
+
 # Регистрация функции как обработчика события startup
 @app.on_event("startup")
 async def startup_event():
@@ -262,9 +302,26 @@ async def check_transactions():
 
                 new_balance = await get_wallet_balance(wallet_address, mnemonic)
 
+                # # Проверяем, оплачено ли уже
+                # cursor.execute('SELECT paid FROM logs WHERE wallet_address = ? ORDER BY activation_time DESC LIMIT 1',
+                #                (wallet_address,))
+                # paid_status = cursor.fetchone()[0]
+
+                # if paid_status:  # Если уже оплачено, пропускаем 1000000000
+                #     print(f"Кошелек {wallet_address} уже был оплачен.")
+                #     continue
+
                 if new_balance * 1000000000 >= amount_api:
                     # Уведомляем стороннее API о транзакции
-                    notify_external_api(user_id, new_balance)
+                    # notify_external_api(user_id, new_balance)
+
+                    # Обновляем статус в логах на "оплачено" и записываем время оплаты
+                    print(f"Кошелек {wallet_address} уже был оплачен {user_id}.")
+                    cursor.execute('''UPDATE logs 
+                                      SET paid = 1, payment_time = ? 
+                                      WHERE wallet_address = ? AND user_id = ?''',
+                                   (datetime.now(), wallet_address, user_id))
+                    conn.commit()
 
                     # Обновляем баланс в базе данных
                     cursor.execute('UPDATE wallets SET active = 0, user_id = NULL, amount_api = 0 WHERE id = ?', (wallet_id,))
@@ -322,8 +379,8 @@ async def get_wallet_balance(wallet_address: str, mnemonic: str) -> float:
 
 
 # Функция для уведомления внешнего API о транзакции
-def notify_external_api(user_id: str, amount: float):
-    # external_api_url = "https://example.com/notify"
-    payload = {"user_id": user_id, "amount": amount, "timestamp": datetime.now().isoformat()}
-    response = requests.post(external_api_url, json=payload)
-    print(f"Notified external API: {response.status_code}")
+# def notify_external_api(user_id: str, amount: float):
+#     # external_api_url = "https://example.com/notify"
+#     payload = {"user_id": user_id, "amount": amount, "timestamp": datetime.now().isoformat()}
+#     response = requests.post(external_api_url, json=payload)
+#     print(f"Notified external API: {response.status_code}")
