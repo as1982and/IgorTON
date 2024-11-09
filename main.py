@@ -2,6 +2,7 @@ import asyncio
 import time
 import requests
 import os
+import re
 import json
 import base64
 import sqlite3
@@ -12,14 +13,13 @@ from tonsdk.contract.wallet import Wallets, WalletVersionEnum
 from datetime import datetime, timedelta
 from TonTools import TonCenterClient, Wallet
 
-
 WALLETS_DIR = "wallets"
 TOTAL_WALLETS = 15
 
 monitoring_started = False
 
 # здесь прописывается основной кошелек для перевода
-MASTER_WALLET_ADDRESS = "kQA3jzHPEYbEWuCSZQ2Uz-qihPxbBXBm4ppHD8FJk6vwGwNS"
+MASTER_WALLET_ADDRESS = "UQADmrWVaDJXxX6ie6CF8YWK02nu_GDaTesz0fA3lm3goAhB"
 external_api_url = "https://example.com/notify"
 
 app = FastAPI()
@@ -189,17 +189,77 @@ async def check_wallet_balances():
 
 
 # Эндпоинт для проверки статуса оплаты
-@app.get("/check-payment-status")
-async def check_payment_status(user_id: str):
+@app.get("/check_transactions")
+async def check_payment_status():
     global monitoring_started
     now = datetime.now()
     one_hour_ago = now - timedelta(hours=1)
+    hours_trs_last = 1 * 3600
+    provider = TonCenterClient()
+    # mnemonic_array = mnemonic.split()
+    wallet = Wallet(provider=provider, address=MASTER_WALLET_ADDRESS)
 
-    # if not monitoring_started:
-    #     monitoring_started = True  # Обновляем статус мониторинга
-    #     # thread = threading.Thread(target=check_transactions, daemon=True)
-    #     # thread.start()
-    #     asyncio.create_task(check_transactions())
+    try:
+        await asyncio.sleep(5)
+        trs = await wallet.get_transactions(100)
+        # await asyncio.sleep(5)
+        # my_wallet_nano_balance = await wallet.get_balance()
+
+    except GetMethodError as e:
+        print(f"Ошибка при получении seqno для кошелька {MASTER_WALLET_ADDRESS}: {str(e)}")
+
+    except (KeyError, json.JSONDecodeError) as e:
+        print(f"Ошибка при чтении баланса кошелька {MASTER_WALLET_ADDRESS}: {str(e)}")
+
+    except Exception as e:
+        print(f"Неизвестная ошибка при обработке кошелька {MASTER_WALLET_ADDRESS}: {str(e)}")
+
+    filtered_transactions = []
+
+    if trs:
+        for tr in trs:
+            # print(tr.to_dict_user_friendly()['comment'])
+            # print(tr.to_dict())
+            filtered_transactions.append({
+                "utime": tr.to_dict()["utime"],
+                "hash": tr.to_dict()["hash"],
+                "msg_data": tr.to_dict()["in_msg"].get("msg_data"),
+                "value": tr.to_dict()["in_msg"].get("value")
+            })
+            print(filtered_transactions)
+            return {"return": filtered_transactions}
+            # if tr.to_dict().get('in_msg'):
+            #     msg_data = tr.to_dict()['in_msg'].get('msg_data')
+            #
+            #     if msg_data:
+            #         # Декодируем msg_data из base64
+            #         try:
+            #             print("msg_data:", msg_data)
+            #             # msg_data_bytes = base64.b64decode(msg_data)
+            #             # text_part = re.findall(b'[ -~\xa0-\xff]+', msg_data_bytes)
+            #             # decoded_text = msg_data_bytes.decode('utf-8', errors='ignore')
+            #             # Декодируем найденные части в строку
+            #             # decoded_text = [part.decode('utf-8', errors='ignore') for part in text_part]
+            #
+            #             # print("Decoded msg_data:", decoded_text)
+            #
+            #         except Exception:
+            #             None
+
+    return {"status": "0"}
+
+
+
+
+
+@app.get("/check-payment-status")
+async def check_payment_status(user_id: str):
+    now = datetime.now()
+    one_hour_ago = now - timedelta(hours=1)
+
+    # Проверяем кошельки, у которых активность True
+    cursor.execute('SELECT id, address, mnemonic, user_id, amount_api FROM wallets WHERE active = 1')
+    active_wallets = cursor.fetchall()
 
     # Ищем запись с указанным user_id и статусом оплаты
     cursor.execute('''
@@ -227,10 +287,10 @@ async def check_payment_status(user_id: str):
 
 
 # Регистрация функции как обработчика события startup
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(check_wallet_balances_periodically())
-    await ensure_wallets_exist()
+# @app.on_event("startup")
+# async def startup_event():
+#     asyncio.create_task(check_wallet_balances_periodically())
+#     await ensure_wallets_exist()
 
 
 # Эндпоинт для создания транзакции
