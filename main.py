@@ -201,7 +201,7 @@ async def check_payment_status():
 
     try:
         await asyncio.sleep(5)
-        trs = await wallet.get_transactions(100)
+        trs = await wallet.get_transactions(limit=50)
         # await asyncio.sleep(5)
         # my_wallet_nano_balance = await wallet.get_balance()
 
@@ -218,33 +218,18 @@ async def check_payment_status():
 
     if trs:
         for tr in trs:
-            # print(tr.to_dict_user_friendly()['comment'])
-            # print(tr.to_dict())
-            filtered_transactions.append({
-                "utime": tr.to_dict()["utime"],
-                "hash": tr.to_dict()["hash"],
-                "msg_data": tr.to_dict()["in_msg"].get("msg_data"),
-                "value": tr.to_dict()["in_msg"].get("value")
-            })
-            print(filtered_transactions)
-            return {"return": filtered_transactions}
-            # if tr.to_dict().get('in_msg'):
-            #     msg_data = tr.to_dict()['in_msg'].get('msg_data')
-            #
-            #     if msg_data:
-            #         # Декодируем msg_data из base64
-            #         try:
-            #             print("msg_data:", msg_data)
-            #             # msg_data_bytes = base64.b64decode(msg_data)
-            #             # text_part = re.findall(b'[ -~\xa0-\xff]+', msg_data_bytes)
-            #             # decoded_text = msg_data_bytes.decode('utf-8', errors='ignore')
-            #             # Декодируем найденные части в строку
-            #             # decoded_text = [part.decode('utf-8', errors='ignore') for part in text_part]
-            #
-            #             # print("Decoded msg_data:", decoded_text)
-            #
-            #         except Exception:
-            #             None
+            if tr.to_dict_user_friendly()["type"] == 'in':
+                print(tr.to_dict_user_friendly())
+                filtered_transactions.append({
+                    "status": tr.to_dict_user_friendly()["status"],
+                    "time": tr.to_dict()["utime"],
+                    "hash": tr.to_dict()["hash"],
+                    "memo": tr.to_dict()["in_msg"].get("msg_data"),
+                    "value": tr.to_dict_user_friendly()["value"]
+                })
+        # print(filtered_transactions)
+
+        return {"return": filtered_transactions}
 
     return {"status": "0"}
 
