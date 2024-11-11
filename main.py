@@ -1,20 +1,30 @@
 import asyncio
 import time
+from pathlib import Path
+
 import requests
 import os
 import re
 import json
 import base64
 import sqlite3
+
+# from TonTools.Contracts.Contract import Transaction
+from pytonlib import TonlibClient
+from pytonlib.utils.tlb import Transaction, Slice, Cell, CommentMessage
+from tonsdk.utils import b64str_to_bytes
 from TonTools.Providers.TonCenterClient import GetMethodError
 from fastapi import FastAPI
 from pydantic import BaseModel
+from pytonlib.utils.common import b64str_to_bytes
+# from sqlalchemy.sql.elements import Slice
 from tonsdk.contract.wallet import Wallets, WalletVersionEnum
 from datetime import datetime, timedelta
 from TonTools import TonCenterClient, Wallet
+from tvm_valuetypes import deserialize_boc
 
 WALLETS_DIR = "wallets"
-TOTAL_WALLETS = 15
+TOTAL_WALLETS = 5
 
 monitoring_started = False
 
@@ -49,6 +59,20 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS logs (
                     payment_time TEXT
                 )''')
 conn.commit()
+
+async def get_client():
+    url = 'https://ton.org/global-config.json'
+
+    config = requests.get(url).json()
+
+    keystore_dir = '/wallets/1'
+    Path(keystore_dir).mkdir(parents=True, exist_ok=True)
+
+    client = TonlibClient(ls_index=2, config=config, keystore=keystore_dir, tonlib_timeout=20)
+
+    await client.init()
+
+    return client
 
 
 class TransactionRequest(BaseModel):
@@ -114,7 +138,7 @@ async def ensure_wallets_exist():
 
 
 async def create_wallet():
-    mnemonic, pub_k, priv_k, wallet = Wallets.create(version=WalletVersionEnum.v3r2, workchain=0)
+    mnemonic, pub_k, priv_k, wallet = Wallets.create(version=WalletVersionEnum.v4r1, workchain=0)
     # mnemonic = mnemonic_new()
     # wallet = Wallet(mnemonic, Wallet.VERSION)
     print(mnemonic)
@@ -191,19 +215,27 @@ async def check_wallet_balances():
 # Эндпоинт для проверки статуса оплаты
 @app.get("/check_transactions")
 async def check_payment_status():
-    global monitoring_started
-    now = datetime.now()
-    one_hour_ago = now - timedelta(hours=1)
-    hours_trs_last = 1 * 3600
     provider = TonCenterClient()
-    # mnemonic_array = mnemonic.split()
     wallet = Wallet(provider=provider, address=MASTER_WALLET_ADDRESS)
+    # client = await get_client()
 
     try:
         await asyncio.sleep(5)
+        # trs = await client.get_transactions(account=MASTER_WALLET_ADDRESS, limit=50)
+        #
+        # for tr in trs:
+        #     # cell = deserialize_boc(b64str_to_bytes(tr['data']))
+        #     # tr_data = Transaction(Slice(cell))
+        #     mess =  'te6cckEBAgEARwABYnNi0JwAAAAAAAAAADAYaggBcl7eIvI2BqPOZ+sOocdUKNDceR0rl+vB4+41e8G/SkkBACIAAAAAMTE1QGdtYWlsLmNvbXGf7oY='
+        #     cell = Cell()
+        #     cell.data.from_bytes(b64str_to_bytes(mess))
+        #     result = CommentMessage.parse(Slice(cell))
+        #     print(result.text_comment)
+        #     print('-----------------------------------')
+        #     # print(tr_data)
         trs = await wallet.get_transactions(limit=50)
-        # await asyncio.sleep(5)
-        # my_wallet_nano_balance = await wallet.get_balance()
+        await asyncio.sleep(5)
+        my_wallet_nano_balance = await wallet.get_balance()
 
     except GetMethodError as e:
         print(f"Ошибка при получении seqno для кошелька {MASTER_WALLET_ADDRESS}: {str(e)}")
@@ -212,20 +244,33 @@ async def check_payment_status():
         print(f"Ошибка при чтении баланса кошелька {MASTER_WALLET_ADDRESS}: {str(e)}")
 
     except Exception as e:
-        print(f"Неизвестная ошибка при обработке кошелька {MASTER_WALLET_ADDRESS}: {str(e)}")
+        print(f"Неизвестная ошибка : {str(e)}")
 
     filtered_transactions = []
 
     if trs:
         for tr in trs:
+            # transa = Transaction()
+            # cell = deserialize_boc(b64str_to_bytes(tr['data']))
+            # tr_data = transa.to_dict_user_friendly(tr)
+            # print(tr)
             if tr.to_dict_user_friendly()["type"] == 'in':
-                print(tr.to_dict_user_friendly())
+                print(tr.to_dict())
+                memo = ''
+
+                is_base64, decoded_bytes = is_base64_encoded(tr.to_dict()["in_msg"].get("msg_data"))
+
+                if is_base64:
+                    memo = decoded_bytes
+                else:
+                    memo = tr.to_dict()["in_msg"].get("msg_data")
+
                 filtered_transactions.append({
                     "status": tr.to_dict_user_friendly()["status"],
                     "time": tr.to_dict()["utime"],
                     "hash": tr.to_dict()["hash"],
-                    "memo": tr.to_dict()["in_msg"].get("msg_data"),
-                    "value": tr.to_dict_user_friendly()["value"]
+                    "memo": memo,
+                    "value": format(tr.to_dict_user_friendly()["value"], '.10f')
                 })
         # print(filtered_transactions)
 
@@ -234,6 +279,27 @@ async def check_payment_status():
     return {"status": "0"}
 
 
+def is_base64_encoded(data):
+    if len(data) % 4 != 0:
+        return False
+    try:
+        decoded_data = base64.b64decode(data)
+        # print(decoded_data)
+        decoded_text = decoded_data.decode('utf-8', errors='ignore')
+        # cleaned_text = ''.join(filter(lambda x: x.isprintable(), decoded_text))
+        # data_items = re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+|[a-zA-Z0-9-_]+', cleaned_text)
+        # print(data_items)
+        email_match = re.search(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', decoded_text)
+
+        if email_match:
+            email = email_match.group(0)
+            print("Извлеченный email:", email)
+            return True, email
+        else:
+            return False, None
+        # return True, data_items
+    except Exception:
+        return False, None
 
 
 
