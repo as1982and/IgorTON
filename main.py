@@ -264,11 +264,17 @@ def is_base64_encoded(data):
     try:
         decoded_data = base64.b64decode(data)
         decoded_text = decoded_data.decode('utf-8', errors='ignore')
-        # email_match = re.search(r'\b[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}\b', decoded_text)
-        email_match = re.search(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', decoded_text)
+        email_match = re.search(r'\b[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}\b', decoded_text)
+        # email_match = re.search(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', decoded_text)
         # print(email_match)
+
         if email_match:
-            email = email_match.group(0)[:-1]
+            email = email_match.group(0)
+
+            last_dot_index = email.rfind('.')
+            if last_dot_index != -1 and len(email) > last_dot_index + 3:
+                email = email[:last_dot_index + 4]
+
             return True, email
         else:
             return False, None
