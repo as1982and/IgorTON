@@ -9,9 +9,10 @@ import json
 import base64
 import sqlite3
 
+from pytonlib.utils.common import b64str_to_bytes
 # from TonTools.Contracts.Contract import Transaction
 # from pytonlib import TonlibClient
-# from pytonlib.utils.tlb import Transaction, Slice, Cell, CommentMessage
+from pytonlib.utils.tlb import Transaction, Slice, Cell, CommentMessage, JettonTransferNotificationMessage
 # from tonsdk.utils import b64str_to_bytes
 from TonTools.Providers.TonCenterClient import GetMethodError
 from fastapi import FastAPI
@@ -21,7 +22,7 @@ from pydantic import BaseModel
 from tonsdk.contract.wallet import Wallets, WalletVersionEnum
 from datetime import datetime, timedelta
 from TonTools import TonCenterClient, Wallet
-# from tvm_valuetypes import deserialize_boc
+from tvm_valuetypes import deserialize_boc
 
 WALLETS_DIR = "wallets"
 TOTAL_WALLETS = 5
@@ -235,7 +236,16 @@ async def check_payment_status():
     filtered_transactions = []
 
     if trs:
+        # print(trs[0].to_dict())
+        # print('---------------------')
+        # cell = deserialize_boc(b64str_to_bytes(trs[0].to_dict()['in_msg'].get("msg_data")))
+        # tr_data = JettonTransferNotificationMessage(Slice(cell))
+        # re = tr_data.amount/1000000
+        # print(re)
+
+
         for tr in trs:
+
             if tr.to_dict_user_friendly()["type"] == 'in':
                 memo = ''
                 is_base64, decoded_bytes = is_base64_encoded(tr.to_dict()["in_msg"].get("msg_data"))
@@ -246,12 +256,16 @@ async def check_payment_status():
                 dt_object = datetime.utcfromtimestamp(tr.to_dict()["utime"])
                 formatted_time = dt_object.strftime('%H:%M %d-%m-%Y')
 
+                cell = deserialize_boc(b64str_to_bytes(tr.to_dict()['in_msg'].get("msg_data")))
+                tr_data = JettonTransferNotificationMessage(Slice(cell))
+                re = tr_data.amount / 1000000
+
                 filtered_transactions.append({
                     "status": tr.to_dict_user_friendly()["status"],
                     "time": formatted_time,
                     "hash": tr.to_dict()["hash"],
                     "memo": memo,
-                    "value": format(tr.to_dict_user_friendly()["value"], '.10f')
+                    "value": re
                 })
         return {"return": filtered_transactions}
 
