@@ -2,7 +2,7 @@ import asyncio
 import time
 from pathlib import Path
 
-import requests
+# import requests
 import os
 import re
 import json
@@ -10,18 +10,18 @@ import base64
 import sqlite3
 
 # from TonTools.Contracts.Contract import Transaction
-from pytonlib import TonlibClient
-from pytonlib.utils.tlb import Transaction, Slice, Cell, CommentMessage
-from tonsdk.utils import b64str_to_bytes
+# from pytonlib import TonlibClient
+# from pytonlib.utils.tlb import Transaction, Slice, Cell, CommentMessage
+# from tonsdk.utils import b64str_to_bytes
 from TonTools.Providers.TonCenterClient import GetMethodError
 from fastapi import FastAPI
 from pydantic import BaseModel
-from pytonlib.utils.common import b64str_to_bytes
+# from pytonlib.utils.common import b64str_to_bytes
 # from sqlalchemy.sql.elements import Slice
 from tonsdk.contract.wallet import Wallets, WalletVersionEnum
 from datetime import datetime, timedelta
 from TonTools import TonCenterClient, Wallet
-from tvm_valuetypes import deserialize_boc
+# from tvm_valuetypes import deserialize_boc
 
 WALLETS_DIR = "wallets"
 TOTAL_WALLETS = 5
@@ -60,19 +60,19 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS logs (
                 )''')
 conn.commit()
 
-async def get_client():
-    url = 'https://ton.org/global-config.json'
-
-    config = requests.get(url).json()
-
-    keystore_dir = '/wallets/1'
-    Path(keystore_dir).mkdir(parents=True, exist_ok=True)
-
-    client = TonlibClient(ls_index=2, config=config, keystore=keystore_dir, tonlib_timeout=20)
-
-    await client.init()
-
-    return client
+# async def get_client():
+#     url = 'https://ton.org/global-config.json'
+#
+#     config = requests.get(url).json()
+#
+#     keystore_dir = '/wallets/1'
+#     Path(keystore_dir).mkdir(parents=True, exist_ok=True)
+#
+#     client = TonlibClient(ls_index=2, config=config, keystore=keystore_dir, tonlib_timeout=20)
+#
+#     await client.init()
+#
+#     return client
 
 
 class TransactionRequest(BaseModel):
@@ -221,21 +221,7 @@ async def check_payment_status():
 
     try:
         await asyncio.sleep(5)
-        # trs = await client.get_transactions(account=MASTER_WALLET_ADDRESS, limit=50)
-        #
-        # for tr in trs:
-        #     # cell = deserialize_boc(b64str_to_bytes(tr['data']))
-        #     # tr_data = Transaction(Slice(cell))
-        #     mess =  'te6cckEBAgEARwABYnNi0JwAAAAAAAAAADAYaggBcl7eIvI2BqPOZ+sOocdUKNDceR0rl+vB4+41e8G/SkkBACIAAAAAMTE1QGdtYWlsLmNvbXGf7oY='
-        #     cell = Cell()
-        #     cell.data.from_bytes(b64str_to_bytes(mess))
-        #     result = CommentMessage.parse(Slice(cell))
-        #     print(result.text_comment)
-        #     print('-----------------------------------')
-        #     # print(tr_data)
         trs = await wallet.get_transactions(limit=50)
-        await asyncio.sleep(5)
-        my_wallet_nano_balance = await wallet.get_balance()
 
     except GetMethodError as e:
         print(f"Ошибка при получении seqno для кошелька {MASTER_WALLET_ADDRESS}: {str(e)}")
@@ -250,30 +236,23 @@ async def check_payment_status():
 
     if trs:
         for tr in trs:
-            # transa = Transaction()
-            # cell = deserialize_boc(b64str_to_bytes(tr['data']))
-            # tr_data = transa.to_dict_user_friendly(tr)
-            # print(tr)
             if tr.to_dict_user_friendly()["type"] == 'in':
-                print(tr.to_dict())
                 memo = ''
-
                 is_base64, decoded_bytes = is_base64_encoded(tr.to_dict()["in_msg"].get("msg_data"))
 
                 if is_base64:
                     memo = decoded_bytes
-                else:
-                    memo = tr.to_dict()["in_msg"].get("msg_data")
+
+                dt_object = datetime.utcfromtimestamp(tr.to_dict()["utime"])
+                formatted_time = dt_object.strftime('%H:%M %d-%m-%Y')
 
                 filtered_transactions.append({
                     "status": tr.to_dict_user_friendly()["status"],
-                    "time": tr.to_dict()["utime"],
+                    "time": formatted_time,
                     "hash": tr.to_dict()["hash"],
                     "memo": memo,
                     "value": format(tr.to_dict_user_friendly()["value"], '.10f')
                 })
-        # print(filtered_transactions)
-
         return {"return": filtered_transactions}
 
     return {"status": "0"}
@@ -284,20 +263,16 @@ def is_base64_encoded(data):
         return False
     try:
         decoded_data = base64.b64decode(data)
-        # print(decoded_data)
         decoded_text = decoded_data.decode('utf-8', errors='ignore')
-        # cleaned_text = ''.join(filter(lambda x: x.isprintable(), decoded_text))
-        # data_items = re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+|[a-zA-Z0-9-_]+', cleaned_text)
-        # print(data_items)
+        # email_match = re.search(r'\b[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}\b', decoded_text)
         email_match = re.search(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', decoded_text)
-
+        # print(email_match)
         if email_match:
-            email = email_match.group(0)
-            print("Извлеченный email:", email)
+            email = email_match.group(0)[:-1]
             return True, email
         else:
             return False, None
-        # return True, data_items
+
     except Exception:
         return False, None
 
