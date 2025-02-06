@@ -278,7 +278,7 @@ def is_base64_encoded(data):
     try:
         decoded_data = base64.b64decode(data)
         decoded_text = decoded_data.decode('utf-8', errors='ignore')
-        match = re.search(r'\b[a-zA-Z0-9]{8}\b', decoded_text)
+        match = re.search(r'[a-zA-Z0-9]{8}', decoded_text)
         # email_match = re.search(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', decoded_text)
         # print(email_match)
 
