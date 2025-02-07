@@ -254,6 +254,7 @@ async def check_payment_status():
                     memo = decoded_bytes
 
                 dt_object = datetime.utcfromtimestamp(tr.to_dict()["utime"])
+                sender_wallet = tr.to_dict()["address"].get("account_address")
                 formatted_time = dt_object.strftime('%H:%M %d-%m-%Y')
 
                 cell = deserialize_boc(b64str_to_bytes(tr.to_dict()['in_msg'].get("msg_data")))
@@ -265,7 +266,8 @@ async def check_payment_status():
                     "time": formatted_time,
                     "hash": tr.to_dict()["hash"],
                     "memo": memo,
-                    "value": re
+                    "value": re,
+                    "sender_wallet": sender_wallet
                 })
         return {"return": filtered_transactions}
 
