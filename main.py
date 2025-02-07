@@ -257,6 +257,7 @@ async def check_payment_status():
                 formatted_time = dt_object.strftime('%H:%M %d-%m-%Y')
 
                 cell = deserialize_boc(b64str_to_bytes(tr.to_dict()['in_msg'].get("msg_data")))
+                sender = tr.to_dict()['in_msg']["source"];
                 tr_data = JettonTransferNotificationMessage(Slice(cell))
                 re = tr_data.amount / 1000000
 
@@ -265,7 +266,8 @@ async def check_payment_status():
                     "time": formatted_time,
                     "hash": tr.to_dict()["hash"],
                     "memo": memo,
-                    "value": re
+                    "value": re,
+                    "sender": sender
                 })
         return {"return": filtered_transactions}
 
