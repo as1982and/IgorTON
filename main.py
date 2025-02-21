@@ -255,11 +255,15 @@ async def check_payment_status():
 
                 dt_object = datetime.utcfromtimestamp(tr.to_dict()["utime"])
                 formatted_time = dt_object.strftime('%H:%M %d-%m-%Y')
-
-                cell = deserialize_boc(b64str_to_bytes(tr.to_dict()['in_msg'].get("msg_data")))
                 sender = tr.to_dict()['in_msg']["source"]
-                tr_data = JettonTransferNotificationMessage(Slice(cell))
-                re = tr_data.amount / 1000000
+                re = 0
+
+                try:
+                    cell = deserialize_boc(b64str_to_bytes(tr.to_dict()['in_msg'].get("msg_data")))
+                    tr_data = JettonTransferNotificationMessage(Slice(cell))
+                    re = tr_data.amount / 1000000
+                except ValueError as e:
+                    print(f"Ошибка при парсинге транзакции {tr.to_dict()['hash']}: {str(e)}")
 
                 filtered_transactions.append({
                     "status": tr.to_dict_user_friendly()["status"],
